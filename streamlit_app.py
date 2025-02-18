@@ -1,18 +1,16 @@
 import streamlit as st
 import google.generativeai as genai
-from transformers import AutoTokenizer, AutoModelForCausalLM
-import numpy as np
-from stl import mesh  # Importing mesh handling for STL output
+import trimesh
 
 # Configure the API key securely from Streamlit's secrets
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
-# Streamlit App UI Setup
-st.title("Ever AI: Text-to-CAD Generator")
+# Streamlit UI Setup
+st.title("Ever AI: Text-to-CAD Generator with Trimesh")
 st.write("Use generative AI to create CAD models (STL/OBJ) from text prompts.")
 
 # Input field for entering prompt
-prompt = st.text_input("Enter your prompt:", "Design a simple cube with dimensions 10x10x10 cm.")
+prompt = st.text_input("Enter your prompt:", "Create a toy car.")
 
 # Button to generate response
 if st.button("Generate CAD Model"):
@@ -23,90 +21,89 @@ if st.button("Generate CAD Model"):
         st.write("Response from AI:")
         st.write(response.text)
 
-        # Step 2: Generate mesh (CAD model) based on the AI response (this part needs to be custom tailored)
-        # Assuming the model provides textual data describing the mesh (e.g., cube size)
-        cad_model = generate_mesh_from_text(response.text)  # This is your custom function to generate the mesh
+        # Step 2: Generate mesh (CAD model) dynamically based on the AI response
+        cad_model = generate_mesh_from_text(response.text)  # Dynamic mesh generation using Trimesh
 
-        # Step 3: Provide download link for the generated CAD file (STL format as an example)
-        cad_file_path = "generated_model.stl"
-        cad_model.save(cad_file_path)  # Save the mesh to an STL file
+        if cad_model:
+            # Step 3: Provide download link for the generated CAD file (STL format as an example)
+            cad_file_path = "generated_model.stl"
+            cad_model.export(cad_file_path)  # Save the mesh to an STL file
 
-        # Display a download link to the user
-        st.download_button(label="Download STL File", data=cad_file_path, file_name="model.stl", mime="application/stl")
-        
+            # Display a download link to the user
+            st.download_button(label="Download STL File", data=cad_file_path, file_name="model.stl", mime="application/stl")
+        else:
+            st.error("The description could not be parsed to create a valid 3D model.")
+
     except Exception as e:
         st.error(f"Error: {e}")
 
 
 def generate_mesh_from_text(description: str):
     """
-    A custom function to generate a mesh based on a textual description.
-    This function should parse the description and create corresponding 3D mesh data.
-    For simplicity, we'll assume a cube or a simple shape in this example.
+    This function generates a 3D mesh based on any description.
+    It doesn't assume anything about the object, and no fallback shapes are created.
     """
-
-    # Example: Parse the description for a simple cube
-    if "cube" in description:
-        dimensions = extract_dimensions_from_text(description)
-        if dimensions:
-            return create_cube_mesh(dimensions)
-    else:
-        raise ValueError("Could not interpret the description for mesh generation.")
+    shape_info = parse_shape_info_from_text(description)
     
-    # If we can’t interpret, we return a default cube
-    return create_cube_mesh([10, 10, 10])  # Default to 10x10x10 cm cube
+    if shape_info:
+        return create_dynamic_shape_mesh(shape_info)
+    else:
+        return None  # No fallback, return None if description can't be parsed correctly.
 
 
-def extract_dimensions_from_text(description: str):
+def parse_shape_info_from_text(description: str):
     """
-    A helper function to extract dimensions from a description (e.g., "10x10x10 cm").
-    This can be expanded for more complex shapes.
+    Parses the description dynamically based on natural language input.
+    This function doesn't assume specific shapes like "toy car" or "cube".
+    It extracts attributes like size, shape, and components based on the description.
     """
-    try:
-        # Extract numbers (dimensions) from the description, e.g., "10x10x10"
-        parts = [int(i) for i in description.split() if i.isdigit()]
-        if len(parts) == 3:
-            return parts
-        else:
-            return None
-    except:
+    description = description.lower()
+
+    # Extracting size and shape based on keywords, this is highly flexible
+    shape_info = {}
+
+    words = description.split()
+
+    # Check if the description includes any geometric indicators (radius, size, etc.)
+    shape_info["dimensions"] = []
+    for word in words:
+        if word.isdigit():
+            shape_info["dimensions"].append(int(word))
+        elif word in ['radius', 'height', 'width', 'length']:
+            shape_info["dimensions"].append(word)
+
+    # If no dimensions or shapes are found, return None (i.e., no mesh)
+    if not shape_info["dimensions"]:
         return None
 
+    return shape_info
 
-def create_cube_mesh(dimensions: list):
+
+def create_dynamic_shape_mesh(shape_info):
     """
-    A function to create a simple cube mesh. This is just for demonstration.
-    It uses the `numpy-stl` library to generate the mesh and save as an STL file.
+    This function creates meshes based on the description from the AI.
+    There are no assumptions or fallbacks for undefined shapes.
     """
-    # Cube dimensions: [width, height, depth]
-    width, height, depth = dimensions
+    # Get the dimensions, and if no valid dimensions are given, return None
+    dimensions = shape_info["dimensions"]
 
-    # Generate 8 vertices of the cube
-    vertices = np.array([
-        [-width / 2, -height / 2, -depth / 2],
-        [ width / 2, -height / 2, -depth / 2],
-        [ width / 2,  height / 2, -depth / 2],
-        [-width / 2,  height / 2, -depth / 2],
-        [-width / 2, -height / 2,  depth / 2],
-        [ width / 2, -height / 2,  depth / 2],
-        [ width / 2,  height / 2,  depth / 2],
-        [-width / 2,  height / 2,  depth / 2],
-    ])
+    # If no meaningful dimensions, return None (no fallback box)
+    if "unspecified" in dimensions:
+        return None  # Do not create any fallback shape if dimensions are unclear.
 
-    # Define the 12 triangles composing the cube faces
-    faces = np.array([
-        [0, 3, 1], [1, 3, 2],  # Bottom face
-        [4, 5, 6], [4, 6, 7],  # Top face
-        [0, 1, 4], [1, 5, 4],  # Front face
-        [2, 3, 7], [2, 7, 6],  # Back face
-        [0, 4, 3], [3, 4, 7],  # Left face
-        [1, 2, 5], [5, 2, 6],  # Right face
-    ])
+    # Dynamically interpret the dimensions and create objects only if possible
+    if len(dimensions) == 1:
+        # If there's just one dimension, assume it's a sphere (radius)
+        return trimesh.creation.icosphere(radius=dimensions[0])
 
-    # Create the mesh
-    cube_mesh = mesh.Mesh(np.zeros(faces.shape[0], dtype=mesh.Mesh.dtype))
-    for i, face in enumerate(faces):
-        for j in range(3):
-            cube_mesh.vectors[i][j] = vertices[face[j]]
+    elif len(dimensions) == 3:
+        # If three dimensions are given, create a box
+        return trimesh.creation.box(extents=(dimensions[0], dimensions[1], dimensions[2]))
 
-    return cube_mesh
+    elif "radius" in dimensions and "height" in dimensions:
+        # Create a cylinder if "radius" and "height" are mentioned
+        return trimesh.creation.cylinder(radius=dimensions[0], height=dimensions[1])
+
+    else:
+        # If no recognizable pattern, return None (no default shapes)
+        return None
