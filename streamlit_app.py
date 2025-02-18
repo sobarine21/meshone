@@ -16,7 +16,7 @@ os.environ["HF_TOKEN"] = st.secrets["HF_TOKEN"]
 # Load the LLaMA-Mesh model and tokenizer
 model_path = "Zhengyi/LLaMA-Mesh"
 tokenizer = AutoTokenizer.from_pretrained(model_path)
-model = AutoModelForCausalLM.from_pretrained(model_path, device_map="auto")
+model = AutoModelForCausalLM.from_pretrained(model_path, device_map="auto", low_cpu_mem_usage=True)
 terminators = [tokenizer.eos_token_id, tokenizer.convert_tokens_to_ids("<|eot_id|>")]
 
 def generate_mesh(prompt, temperature=0.9, max_new_tokens=4096):
