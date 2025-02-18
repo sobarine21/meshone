@@ -5,4 +5,4 @@ torch
 gradio
 trimesh
 numpy
-accelerate
+accelerate>=0.26.0
