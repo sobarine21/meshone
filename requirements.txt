@@ -1,1 +1,7 @@
+transformers
 streamlit
+google-generativeai
+torch
+gradio
+trimesh
+numpy
